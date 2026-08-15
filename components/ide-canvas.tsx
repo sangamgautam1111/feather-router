@@ -172,6 +172,14 @@ interface CodeEditorProps {
 function CodeEditor({ content, filename, onChange }: CodeEditorProps) {
   const lines = useMemo(() => content.split("\n"), [content]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const preRef = useRef<HTMLPreElement>(null);
+
+  function handleScroll(e: React.UIEvent<HTMLTextAreaElement>) {
+    if (preRef.current) {
+      preRef.current.scrollTop = e.currentTarget.scrollTop;
+      preRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }
 
   function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
     onChange(e.target.value);
@@ -199,28 +207,29 @@ function CodeEditor({ content, filename, onChange }: CodeEditorProps) {
     <div className="relative flex min-h-0 flex-1 overflow-hidden font-mono text-[13px] leading-6">
       {/* Line numbers */}
       <div
-        className="select-none border-r border-white/[0.03] bg-[#060a14]/60 py-3 pr-3 text-right text-slate-600 font-mono text-xs"
+        className="select-none border-r border-white/[0.03] bg-[#060a14]/60 py-3 pr-3 text-right text-slate-600 font-mono text-xs h-full shrink-0"
         aria-hidden="true"
         style={{ width: `${Math.max(3, String(lines.length).length + 1)}rem` }}
       >
         {lines.map((_, i) => (
-          <div key={i}>{i + 1}</div>
+          <div key={i} className="h-6 leading-6">{i + 1}</div>
         ))}
       </div>
 
       {/* Syntax-highlighted overlay + transparent editable textarea */}
-      <div className="relative min-w-0 flex-1 overflow-auto ide-scrollbar">
+      <div className="relative min-w-0 flex-1 overflow-hidden">
         {/* Highlighted display code */}
         <pre
-          className="pointer-events-none absolute inset-0 m-0 overflow-visible p-3 font-mono text-[13px] leading-6 text-slate-300"
+          ref={preRef}
+          className="pointer-events-none absolute inset-0 m-0 overflow-hidden p-3 font-mono text-[13px] leading-6 text-slate-300 whitespace-pre"
           aria-hidden="true"
         >
           {lines.map((line, lineIdx) => {
             const tokens = tokenizeLine(line);
             return (
-              <div key={lineIdx} className="whitespace-pre">
+              <div key={lineIdx} className="h-6 leading-6 whitespace-pre">
                 {tokens.length === 0 ? (
-                  "\n"
+                  " "
                 ) : (
                   tokens.map((token, tokIdx) => (
                     <span key={tokIdx} style={{ color: TOKEN_PALETTE[token.kind] ?? "#c9d1d9" }}>
@@ -239,8 +248,9 @@ function CodeEditor({ content, filename, onChange }: CodeEditorProps) {
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onScroll={handleScroll}
           spellCheck={false}
-          className="absolute inset-0 m-0 h-full w-full resize-none border-0 bg-transparent p-3 font-mono text-[13px] leading-6 text-transparent caret-white outline-none selection:bg-cyan-500/30"
+          className="absolute inset-0 m-0 h-full w-full resize-none border-0 bg-transparent p-3 font-mono text-[13px] leading-6 text-transparent caret-white outline-none selection:bg-cyan-500/30 whitespace-pre overflow-auto ide-scrollbar"
           aria-label={`Code editor for ${filename}`}
         />
       </div>
@@ -425,7 +435,7 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
           {activeFileName && <Breadcrumb path={activeFileName} isEdited={editedFiles.has(activeFileName)} />}
 
           {/* Code area */}
-          <div className="flex-1 overflow-hidden bg-[#0b0f1a]">
+          <div className="flex-1 overflow-hidden bg-[#0b0f1a] flex flex-col min-h-0">
             {!activeFileData && files.length === 0 ? (
               <EmptyState isRouting={isRouting} error={error} onClose={onClose} />
             ) : activeFileData ? (

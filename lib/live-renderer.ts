@@ -373,12 +373,30 @@ export function bundleWebWorkspace(files: CanvasFile[]): string {
         ? mainHtmlContent.replace("</body>", `${vueMountScript}\n</body>`)
         : mainHtmlContent + "\n" + vueMountScript;
     } else {
-      // Universal Vanilla JS execution
+      // Universal Vanilla JS execution with DOMContentLoaded polyfill
       const jsScript = `
 <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    ${processedCodeBlocks}
-  });
+  (function() {
+    // DOMContentLoaded safety polyfill: fire immediately if DOM is already loaded
+    const _origAdd = document.addEventListener.bind(document);
+    document.addEventListener = function(type, listener, options) {
+      if (type === 'DOMContentLoaded' && (document.readyState === 'interactive' || document.readyState === 'complete')) {
+        try { listener(); } catch(e) { console.error(e); }
+      } else {
+        _origAdd(type, listener, options);
+      }
+    };
+
+    function runWorkspaceScripts() {
+      ${processedCodeBlocks}
+    }
+
+    if (document.readyState === 'interactive' || document.readyState === 'complete') {
+      runWorkspaceScripts();
+    } else {
+      _origAdd('DOMContentLoaded', runWorkspaceScripts);
+    }
+  })();
 </script>`;
       mainHtmlContent = mainHtmlContent.includes("</body>")
         ? mainHtmlContent.replace("</body>", `${jsScript}\n</body>`)

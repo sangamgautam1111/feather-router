@@ -32,7 +32,7 @@ const stageMetadata: Record<AgentStage, { label: string; prompt: string; refineP
   },
   build: {
     label: "Implementation",
-    prompt: "Return COMPLETE, production-ready, fully functional implementation code in fenced code blocks. Start every code block with a file marker: // file: path/to/file.ts for TypeScript, /* file: styles.css */ for CSS, or <!-- file: index.html --> for HTML. MANDATORY QUALITY RULES: 1. STUNNING MODERN VISUAL DESIGN: Create vibrant dark-mode or glassmorphism UI designs with Google Fonts (Inter/Outfit), rich CSS gradients, flexbox/grid layouts, and smooth micro-animations. 2. REAL HIGH-RES IMAGES: For restaurant/food/landing pages, use real high-resolution Unsplash image URLs (e.g. https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600 for burgers, https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600 for pizza). NEVER use grey placeholders or broken image boxes. 3. HIGH-CONTRAST TEXT: High contrast white/gold/cyan text on dark containers. 4. NO DUPLICATE CODE: Never repeat <!DOCTYPE html> or code markers inside a single response. Output each file exactly ONCE. 5. 100% BUG-FREE JS: Complete, working interactive logic with zero prose text inside code blocks.",
+    prompt: "Return COMPLETE, production-ready, fully functional implementation code in fenced code blocks. Start every code block with a file marker: // file: path/to/file.ts for TypeScript, /* file: styles.css */ for CSS, or <!-- file: index.html --> for HTML. MANDATORY QUALITY RULES: 1. STUNNING MODERN VISUAL DESIGN: Create vibrant dark-mode or glassmorphism UI designs with Google Fonts (Inter/Outfit), rich CSS gradients, flexbox/grid layouts, and smooth micro-animations. 2. CONTEXTUAL HIGH-RES IMAGES: For landing pages, blogs, restaurant or e-commerce apps, use real high-resolution Unsplash image URLs (e.g. https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600 for burgers, https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600 for pizza). NEVER add random <img> tags inside calculators, games, timers, or utility apps where images make zero visual sense! 3. HIGH-CONTRAST TEXT: High contrast white/gold/cyan text on dark containers. 4. NO DUPLICATE CODE: Never repeat <!DOCTYPE html> or code markers inside a single response. Output each file exactly ONCE. 5. 100% BUG-FREE JS: Complete, working interactive logic with zero prose text inside code blocks. 6. MANDATORY JS EVENT BINDING: Inside script.js, ALWAYS wrap code in document.addEventListener('DOMContentLoaded', () => { ... }) and explicitly attach .addEventListener('click', ...) or .onclick handlers to all buttons and interactive elements. NEVER leave orphan functions unbound.",
     refinePrompt: "The user wants to refine their existing codebase. Output ONLY the files that need changes with their COMPLETE, fully implemented updated content in fenced code blocks. Start every code block with a file marker: // file: path/to/file.ts. Enforce stunning dark-mode CSS aesthetics, real Unsplash image URLs, and 100% bug-free JavaScript. Never truncate code. Output each file exactly ONCE.",
   },
   review: {
@@ -44,16 +44,7 @@ const stageMetadata: Record<AgentStage, { label: string; prompt: string; refineP
 /* ─── Task Classification & Helpers ─────────────────────────────────────── */
 
 function frameworkGuidance(task: string) {
-  const t = task.toLowerCase();
-  if (/\bnext(?:\.js|js)?\b|app router|pages router/.test(t))
-    return "The requested framework is Next.js. Produce a complete Next.js App Router component file (app/page.tsx). Include all UI sections, subcomponents, icons, and Tailwind CSS classes in complete, un-truncated TSX code so it renders instantly both in Next.js CLI and in the live browser preview iframe.";
-  if (/\breact\b|\bvite\b/.test(t))
-    return "The requested library is React. Produce component and style files for a React TypeScript project.";
-  if (/\bvue\b|\bsvelte\b|\bangular\b/.test(t))
-    return "The user specified a target framework. Produce code specifically targeting that framework.";
-  if (/\bpython\b|\bflask\b|\bfastapi\b|\bdjango\b/.test(t))
-    return "The requested language/framework is Python. Produce clean, modular Python scripts.";
-  return "Unless the user explicitly specifies a framework (like Next.js or React), default to producing an efficient, modular HTML/CSS/JS base web application (index.html, styles.css, script.js) for maximum performance and instant browser previewability.";
+  return "ALWAYS produce a modular, self-contained HTML5, CSS3, and JavaScript web application (index.html, styles.css, script.js). Ensure all code is production-ready, un-truncated, and immediately previewable in the live browser iframe.";
 }
 
 function classifyTask(task: string): TaskKind {
@@ -115,7 +106,7 @@ async function getModelInventory(apiKey: string): Promise<string[]> {
  * the deterministic heuristic scoring engine in routing-policy.ts.
  */
 
-const GEMINI_ROUTER_MODEL = "gemini-2.5-pro";
+const GEMINI_ROUTER_MODEL = "gemini-2.5-flash";
 
 async function geminiSelectModel({
   task,
@@ -133,7 +124,7 @@ async function geminiSelectModel({
   const geminiKey = getGeminiKey();
   if (!geminiKey || candidates.length === 0) return null;
 
-  const topPool = candidates.slice(0, 15);
+  const topPool = candidates.slice(0, 30);
   const modelList = topPool
     .map((c, i) => `${i + 1}. ${c.model} (heuristic: ${c.score}/100, signals: ${c.signals.slice(0, 3).join(", ")})`)
     .join("\n");
@@ -175,46 +166,57 @@ ${modelList}
 Respond with ONLY a JSON object. No markdown fences. No explanation outside the JSON:
 {"model":"exact-model-id","reason":"one clear sentence why this model is optimal for this task and stage"}`;
 
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_ROUTER_MODEL}:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.05, maxOutputTokens: 200 },
-        }),
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
+  const geminiModelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"];
 
-    if (!res.ok) return null;
+  for (const routerModel of geminiModelsToTry) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${routerModel}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.05, maxOutputTokens: 800 },
+          }),
+          signal: AbortSignal.timeout(8_000),
+        }
+      );
 
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!raw) return null;
+      if (!res.ok) continue;
 
-    // Strip markdown fences if model wraps output
-    const clean = raw.replace(/```(?:json)?\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(clean) as { model?: string; reason?: string };
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!raw) continue;
 
-    if (!parsed.model) return null;
+      const clean = raw.replace(/```(?:json)?\n?/g, "").replace(/```\n?/g, "").trim();
+      const parsed = JSON.parse(clean) as { model?: string; reason?: string };
 
-    // Validate that the selected model actually exists in the candidate pool
-    const match = topPool.find((c) => c.model === parsed.model);
-    if (!match) return null;
+      if (!parsed.model) continue;
 
-    return {
-      model: parsed.model,
-      reason: parsed.reason ?? "Selected by Gemini router intelligence",
-    };
-  } catch {
-    // Gemini call failed — silently fall back to heuristic scoring
-    return null;
+      const pModel = parsed.model.toLowerCase();
+      const pName = pModel.includes("/") ? pModel.split("/").pop()! : pModel;
+
+      const match = topPool.find((c) => {
+        const cModel = c.model.toLowerCase();
+        const cName = cModel.includes("/") ? cModel.split("/").pop()! : cModel;
+        return cModel === pModel || cName === pName || cModel.includes(pName) || pModel.includes(cName);
+      });
+
+      if (!match) continue;
+
+      return {
+        model: match.model,
+        reason: parsed.reason ?? "Selected by Gemini router intelligence",
+      };
+    } catch {
+      continue;
+    }
   }
+
+  return null;
 }
 
 /* ─── Response Extraction ───────────────────────────────────────────────── */
@@ -452,7 +454,7 @@ export async function runCodingAgent({ task, mode, existingCode, image }: {
   if (hasGemini) {
     const buildArtifact = artifacts.find((a) => a.stage === "build" && a.status === "complete");
     if (buildArtifact) {
-      const fixed = await geminiReviewAndFix({ task, buildContent: buildArtifact.content });
+      const fixed = await geminiReviewAndFix({ task, fullContext: context, buildContent: buildArtifact.content });
       if (fixed) {
         buildArtifact.content = fixed;
       }
@@ -472,58 +474,67 @@ export async function runCodingAgent({ task, mode, existingCode, image }: {
 
 async function geminiReviewAndFix({
   task,
+  fullContext,
   buildContent,
 }: {
   task: string;
+  fullContext: string;
   buildContent: string;
 }): Promise<string | null> {
   const geminiKey = getGeminiKey();
   if (!geminiKey) return null;
 
-  const prompt = `You are a world-class code reviewer. The code below was generated by an AI for: "${task.slice(0, 400)}"
+  const prompt = `You are a world-class code reviewer auditing a generated web application codebase for: "${task.slice(0, 500)}"
 
-Your job: find and fix real bugs. Check for:
-1. CSS: dark text on dark backgrounds (e.g. color:#333 on background:#222), missing hover states, broken layouts
-2. JavaScript: parseFloat("") returning NaN, missing event listeners, broken state resets, silent failures
-3. HTML: duplicate <!DOCTYPE html> blocks, placeholder images (placehold.co or 1920x1080), broken links
-4. General: incomplete functions, unreachable code, missing error handling
+## Full Workspace Context (Architecture Plan & Codebase)
+${fullContext.slice(0, 30000)}
 
-RULES:
-- If the code is already correct, respond with exactly: LGTM
-- If you find bugs, output the COMPLETE fixed code keeping the same file markers (// file: or <!-- file: -->)
-- Do NOT add any explanation, commentary, or markdown outside code blocks
-- Keep the same file structure and naming
-- Use real Unsplash URLs instead of placeholder images
+## Target Codebase to Audit & Fix
+${buildContent.slice(0, 30000)}
 
-Code to review:
-${buildContent.slice(0, 14000)}`;
+## MANDATORY CROSS-FILE VERIFICATION RULES:
+1. CROSS-FILE DOM ID MATCHING (CRITICAL): Check every document.getElementById('id') or document.querySelector('.class') in script.js. Ensure the EXACT corresponding id or class exists in index.html! (e.g. if script.js queries 'display', index.html MUST have id="display", NOT class="display").
+2. EVENT LISTENER BINDING (CRITICAL): Ensure event listeners (.addEventListener('click', ...)) are bound to all interactive buttons and inputs inside script.js. If functions exist without event listeners attached, ADD the event listeners so clicks work instantly!
+3. CSS VISIBILITY: Check for dark text on dark containers (color:#333 on background:#222). Ensure crisp, high-contrast text.
+4. JS LOGIC & STATE: Prevent NaN calculation errors, missing state resets, or unhandled null checks.
+5. CONTEXTUALLY INAPPROPRIATE IMAGES: Remove any <img> tags placed inside non-visual utility components like calculators, timers, games, or math displays where images overlap text or make zero visual sense! Use images ONLY on landing pages, blogs, and product showcases.
 
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_ROUTER_MODEL}:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
-        }),
-        signal: AbortSignal.timeout(30_000),
-      }
-    );
+RULES FOR RESPONSE:
+- If the codebase is 100% bug-free and fully functional, respond with ONLY: LGTM
+- If ANY bug or DOM mismatch is found, output the COMPLETE updated, bug-free codebase in fenced code blocks keeping the file markers (// file: path or <!-- file: path -->).
+- Do NOT add commentary or explanation outside code blocks.`;
 
-    if (!res.ok) return null;
+  const geminiModelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"];
 
-    const data = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!text || text === "LGTM" || text.startsWith("LGTM")) return null;
+  for (const routerModel of geminiModelsToTry) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${routerModel}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+          }),
+          signal: AbortSignal.timeout(25_000),
+        }
+      );
 
-    // Only accept if the review actually contains code
-    const hasCode = /```|\/\/ file:|<!-- file:|\/\* file:/.test(text);
-    return hasCode ? text : null;
-  } catch {
-    return null;
+      if (!res.ok) continue;
+
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!text || text === "LGTM" || text.startsWith("LGTM")) return null;
+
+      const hasCode = /```|\/\/ file:|<!-- file:|\/\* file:/.test(text);
+      if (hasCode) return text;
+    } catch {
+      continue;
+    }
   }
+
+  return null;
 }

@@ -22,19 +22,18 @@ const MODES: Array<{ value: RouteMode; label: string; description: string }> = [
 ];
 
 const EXAMPLES = [
-  "calculator web app with sleek glassmorphism UI",
-  "tic tac toe web game with score tracking",
-  "responsive SaaS landing page with dark mode",
-  "Next.js dashboard with auth middleware",
-  "Python linear regression & data visualization script",
-  "interactive HTML/CSS canvas snake game",
+  "responsive HTML/CSS landing page for AI startup with dark mode",
+  "interactive HTML/CSS canvas snake game with score tracking",
+  "glassmorphism calculator web app with smooth CSS transitions",
+  "restaurant menu & reservation page with dark mode theme",
+  "interactive HTML/CSS/JS tic-tac-toe game with score counter",
 ];
 
 const QUICK_SUGGESTIONS = [
   { label: "🎮 Snake Game", prompt: "Build an interactive HTML CSS JS canvas snake game with score tracking and controls" },
   { label: "🧮 Calculator App", prompt: "Build a responsive calculator web app with dark mode and smooth animations" },
-  { label: "⚡ Next.js Auth", prompt: "Add protected dashboard routes to Next.js with middleware check and redirect" },
-  { label: "🐍 Python Script", prompt: "Create a Python script for linear regression modeling and dataset plotting" },
+  { label: "✨ AI Landing Page", prompt: "Build a modern HTML CSS JS landing page for an AI SaaS platform with glassmorphism UI and high-contrast dark theme" },
+  { label: "🍕 Gourmet Restaurant", prompt: "Build a responsive HTML CSS JS gourmet restaurant menu & lounge website with dark mode" },
 ];
 
 export function TaskComposer({

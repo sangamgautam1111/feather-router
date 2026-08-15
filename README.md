@@ -40,7 +40,7 @@ Every routing decision is fully transparent — users can inspect the score brea
 | Layer | Technology |
 |:------|:-----------|
 | Frontend | Next.js 16, React, TypeScript |
-| Router Brain | Gemini 2.5 Pro (Google AI) |
+| Router Brain | Gemini 2.5 Flash (Google AI) |
 | Model Execution | Featherless API (21,700+ open models) |
 | Key Models | Qwen2.5-Coder-32B, Qwen3-VL-30B, DeepSeek-R1, Mistral-Small-3.1 |
 | Styling | Hand-written CSS with dark mode |
@@ -79,7 +79,7 @@ User Prompt
     │
     ▼
 ┌──────────────────────────┐
-│  Gemini 2.5 Pro          │  ← Analyzes task, selects models
+│  Gemini 2.5 Flash        │  ← Analyzes task, selects models
 │  (Router Brain)          │
 └──────────┬───────────────┘
            │
@@ -93,7 +93,7 @@ User Prompt
            │
            ▼
 ┌──────────────────────────┐
-│  Gemini 2.5 Pro          │  ← Reviews output, fixes bugs
+│  Gemini 2.5 Flash        │  ← Reviews output, fixes bugs
 │  (Quality Gate)          │
 └──────────┬───────────────┘
            │

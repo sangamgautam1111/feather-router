@@ -188,7 +188,7 @@ export default function Home() {
                 The right open model for every step of the build.
               </h1>
               <p className="mt-7 max-w-2xl text-base leading-7 text-slate-400 sm:text-lg">
-                FeatherRouter plans, implements, and reviews coding tasks with a model choice you can inspect and trust.
+                FeatherRouter plans, implements, and reviews HTML, CSS, and JavaScript web applications with intelligent model routing you can inspect and trust.
               </p>
               <div className="mt-10 max-w-3xl">
                 <TaskComposer

@@ -74,13 +74,20 @@ function cleanCodeContent(content: string, fileName?: string): string {
   // Strip any remaining trailing blank lines (prevents empty space at end of editor)
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
 
-  // Deduplicate exact repeating blocks (e.g. if LLM outputted full file content twice)
+  // Deduplicate repeated code structures (e.g. if LLM repeats document.addEventListener or full script twice)
   const lines = cleaned.split("\n");
-  if (lines.length > 8) {
-    const header = lines.slice(0, 4).join("\n");
-    const repeatIndex = cleaned.indexOf(header, header.length + 10);
-    if (repeatIndex !== -1) {
-      cleaned = cleaned.slice(0, repeatIndex).trim();
+  if (lines.length > 10) {
+    const firstNonEmpty = lines.findIndex((l) => l.trim().length > 0);
+    if (firstNonEmpty !== -1) {
+      const topTrigger = lines[firstNonEmpty].trim();
+      if (topTrigger.length > 8) {
+        for (let i = firstNonEmpty + 6; i < lines.length; i++) {
+          if (lines[i].trim() === topTrigger) {
+            cleaned = lines.slice(0, i).join("\n").trim();
+            break;
+          }
+        }
+      }
     }
   }
 
