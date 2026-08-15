@@ -6,7 +6,7 @@ import { FileExplorer } from "@/components/file-explorer";
 import { DecisionHistory } from "@/components/decision-history";
 import { RefinementInput } from "@/components/refinement-input";
 import type { CanvasFile } from "@/lib/canvas";
-import { styleForFile, basename } from "@/lib/file-utils";
+import { styleForFile, basename, downloadCodebaseZip } from "@/lib/file-utils";
 import { tokenizeLine, TOKEN_PALETTE } from "@/lib/tokenizer";
 import type { RouteMode, RunEntry } from "@/lib/types";
 
@@ -118,7 +118,7 @@ function EmptyState({
             <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-rose-500/10 text-rose-400">
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
             </div>
@@ -154,7 +154,6 @@ function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
   const lines = useMemo(() => content.split("\n"), [content]);
   const gutterWidth = `${Math.max(String(lines.length).length, 2) * 0.65 + 2.5}rem`;
 
-  /* Synchronize vertical and horizontal scroll between textarea, gutter, and syntax overlay */
   function handleScroll() {
     if (!textareaRef.current) return;
     const { scrollTop, scrollLeft } = textareaRef.current;
@@ -165,7 +164,6 @@ function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
     }
   }
 
-  /* Support Tab key insertion (2 spaces) */
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Tab") {
       e.preventDefault();
@@ -178,7 +176,6 @@ function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
 
       onChange(updated);
 
-      // Restore cursor position after state update
       requestAnimationFrame(() => {
         if (textareaRef.current) {
           textareaRef.current.selectionStart = start + 2;
@@ -223,7 +220,6 @@ function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
                   {token.text}
                 </span>
               ))}
-              {/* Ensure empty lines retain height */}
               {line === "" && <br />}
             </div>
           ))}
@@ -277,8 +273,8 @@ interface IdeCanvasProps {
 export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, onRefine, onClose }: IdeCanvasProps) {
   const { activeFileName, activeFileData, openTabs, selectFile, closeTab, setActiveFileName } = useFileTabs(files);
 
-  /* Track edited state per file */
   const [editedFiles, setEditedFiles] = useState<Set<string>>(new Set());
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   const handleContentChange = useCallback(
     (newContent: string) => {
@@ -289,10 +285,22 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
     [activeFileName, onFileChange],
   );
 
+  async function handleDownloadZip() {
+    if (files.length === 0 || isDownloadingZip) return;
+    setIsDownloadingZip(true);
+    try {
+      await downloadCodebaseZip(files, `feather-router-${mode}-codebase.zip`);
+    } catch {
+      // Graceful download fallback
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  }
+
   return (
     <section className="flex flex-1 flex-col py-4 sm:py-6" aria-label="Code workspace">
       {/* ── Top bar ──────────────────────────────────────── */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <button
             onClick={onClose}
@@ -307,6 +315,27 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Download Codebase (.zip) Button */}
+          {files.length > 0 && (
+            <button
+              onClick={handleDownloadZip}
+              disabled={isDownloadingZip}
+              className="flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-gradient-to-r from-cyan-500/10 via-sky-500/10 to-violet-500/10 px-3.5 py-1.5 text-xs font-semibold text-cyan-200 shadow-sm transition-all hover:border-cyan-400/60 hover:bg-cyan-400/20 hover:text-white disabled:opacity-50"
+              title="Download entire workspace as a ZIP archive"
+            >
+              {isDownloadingZip ? (
+                <RoutingSpinner />
+              ) : (
+                <svg className="h-3.5 w-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              )}
+              <span>Download Codebase (.zip)</span>
+            </button>
+          )}
+
           <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[11px] font-medium capitalize tracking-wide text-slate-400">
             {mode} mode
           </span>
@@ -319,8 +348,8 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
         </div>
       </div>
 
-      {/* ── IDE grid ─────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-[#080c16]/95 shadow-2xl shadow-black/50 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px]">
+      {/* ── IDE grid (Spacious 380px sidebar for router evaluations) ── */}
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-xl border border-white/[0.06] bg-[#080c16]/95 shadow-2xl shadow-black/50 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_380px]">
         {/* Left: File Explorer */}
         <aside className="hidden border-r border-white/[0.04] bg-[#060a14]/90 lg:block">
           <FileExplorer files={files} activeFile={activeFileName} onFileSelect={selectFile} />
@@ -398,7 +427,7 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
           <RefinementInput onSubmit={onRefine} isRouting={isRouting} />
         </div>
 
-        {/* Right: Decision History (desktop) */}
+        {/* Right: Decision History (spacious 380px box) */}
         <aside className="hidden border-l border-white/[0.04] bg-[#060a14]/85 xl:block">
           <DecisionHistory runs={runs} />
         </aside>

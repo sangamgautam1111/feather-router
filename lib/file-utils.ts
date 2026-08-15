@@ -1,3 +1,6 @@
+import JSZip from "jszip";
+import type { CanvasFile } from "@/lib/canvas";
+
 /**
  * Shared file-type display properties.
  *
@@ -40,4 +43,32 @@ export function styleForFile(filename: string): FileTypeStyle {
 /** Extract just the filename from a potentially nested path. */
 export function basename(path: string): string {
   return path.split("/").pop() ?? path;
+}
+
+/**
+ * Packages the generated files into a ZIP archive and triggers a browser download.
+ *
+ * @param files Array of CanvasFile items to package
+ * @param zipFilename Name of the generated zip file (defaults to "feather-router-codebase.zip")
+ */
+export async function downloadCodebaseZip(files: CanvasFile[], zipFilename = "feather-router-codebase.zip"): Promise<void> {
+  if (files.length === 0) return;
+
+  const zip = new JSZip();
+
+  for (const file of files) {
+    // Standardise relative path
+    const cleanPath = file.name.replace(/^\/+/, "");
+    zip.file(cleanPath, file.content);
+  }
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = zipFilename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
