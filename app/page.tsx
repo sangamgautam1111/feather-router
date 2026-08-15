@@ -16,11 +16,6 @@ const MIN_TASK_LENGTH = 12;
 
 /* ── Pure helpers ──────────────────────────────────────── */
 
-/**
- * Merge two file lists by name — incoming files replace existing
- * files with the same name, new files are appended.  Preserves
- * insertion order so the tab bar stays stable.
- */
 function mergeFilesByName(existing: CanvasFile[], incoming: CanvasFile[]): CanvasFile[] {
   const merged = new Map<string, CanvasFile>();
   for (const file of existing) merged.set(file.name, file);
@@ -28,10 +23,6 @@ function mergeFilesByName(existing: CanvasFile[], incoming: CanvasFile[]): Canva
   return Array.from(merged.values());
 }
 
-/**
- * Pack the current implementation files into a context string
- * that the refinement API can pass to the model.
- */
 function packCodeContext(files: CanvasFile[]): string {
   return files
     .filter((f) => f.source === "implementation")
@@ -39,7 +30,6 @@ function packCodeContext(files: CanvasFile[]): string {
     .join("\n\n");
 }
 
-/** Create a RunEntry from an API response. */
 function toRunEntry(prompt: string, mode: RouteMode, response: RouteResponse): RunEntry {
   return {
     id: response.runId,
@@ -50,7 +40,16 @@ function toRunEntry(prompt: string, mode: RouteMode, response: RouteResponse): R
   };
 }
 
-/** Parse a fetch response as JSON, throwing on HTTP errors. */
+function formatErrorMessage(err: unknown, fallbackMessage: string): string {
+  if (err instanceof TypeError && (err.message === "Failed to fetch" || err.message.includes("fetch"))) {
+    return "Connection error: Could not reach the FeatherRouter backend. Please check if the server is active and try again.";
+  }
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return fallbackMessage;
+}
+
 async function parseOrThrow(response: Response, fallbackMessage: string): Promise<RouteResponse> {
   const payload = (await response.json()) as RouteResponse & { error?: string };
   if (!response.ok) throw new Error(payload.error ?? fallbackMessage);
@@ -68,6 +67,14 @@ export default function Home() {
 
   const [runs, setRuns] = useState<RunEntry[]>([]);
   const [files, setFiles] = useState<CanvasFile[]>([]);
+
+  /* ── Direct Code Edit Handler ───────────────────────────── */
+
+  const handleFileChange = useCallback((filename: string, newContent: string) => {
+    setFiles((prevFiles) =>
+      prevFiles.map((file) => (file.name === filename ? { ...file, content: newContent } : file)),
+    );
+  }, []);
 
   /* ── Initial task routing ─────────────────────────────── */
 
@@ -94,7 +101,7 @@ export default function Home() {
       setRuns([toRunEntry(trimmed, mode, result)]);
       setFiles(generatedFiles);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The coding agent could not complete this run.");
+      setError(formatErrorMessage(err, "The coding agent could not complete this run."));
     } finally {
       setIsRouting(false);
     }
@@ -119,7 +126,7 @@ export default function Home() {
         setRuns((prev) => [...prev, toRunEntry(prompt, mode, result)]);
         setFiles((prev) => mergeFilesByName(prev, incomingFiles));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "The refinement could not complete.");
+        setError(formatErrorMessage(err, "The refinement could not complete."));
       } finally {
         setIsRouting(false);
       }
@@ -150,7 +157,7 @@ export default function Home() {
       <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-[#030610]/20 via-transparent to-[#030610]/55" />
 
       <section className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-8 pt-4 sm:px-6 lg:px-10">
-        {/* Header — only visible on the landing page */}
+        {/* Header — only visible on landing page */}
         {!isIdeOpen && (
           <header className="flex items-center justify-between border-b border-white/10 pb-6">
             <a href="#top" aria-label="FeatherRouter home">
@@ -169,6 +176,7 @@ export default function Home() {
             isRouting={isRouting}
             mode={mode}
             error={error}
+            onFileChange={handleFileChange}
             onRefine={refineTask}
             onClose={closeIde}
           />

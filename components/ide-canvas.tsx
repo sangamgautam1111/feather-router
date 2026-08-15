@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react";
 
 import { FileExplorer } from "@/components/file-explorer";
 import { DecisionHistory } from "@/components/decision-history";
@@ -12,23 +12,11 @@ import type { RouteMode, RunEntry } from "@/lib/types";
 
 /* ── Constants ─────────────────────────────────────────── */
 
-/** Maximum number of tabs to auto-open on first generation. */
 const INITIAL_TAB_LIMIT = 4;
-/** Maximum number of new tabs to surface after a refinement. */
 const REFINEMENT_TAB_LIMIT = 2;
 
 /* ── Custom hook: tab & active-file management ─────────── */
 
-/**
- * Encapsulates the tab bar and active-file state, reconciling
- * both whenever the file list changes — either from the initial
- * generation (empty → populated) or from a refinement (files
- * added / replaced).
- *
- * All state transitions happen inside a single `useEffect` to
- * avoid render-during-render warnings that `setTimeout` hacks
- * would introduce.
- */
 function useFileTabs(files: CanvasFile[]) {
   const [activeFileName, setActiveFileName] = useState<string | null>(null);
   const [openTabs, setOpenTabs] = useState<string[]>([]);
@@ -39,12 +27,10 @@ function useFileTabs(files: CanvasFile[]) {
     setOpenTabs((prev) => {
       const retained = prev.filter((tab) => available.has(tab));
 
-      // First generation: nothing open yet → show initial batch.
       if (retained.length === 0 && files.length > 0) {
         return files.slice(0, INITIAL_TAB_LIMIT).map((f) => f.name);
       }
 
-      // Refinement: surface any newly created files as tabs.
       const known = new Set(prev);
       const fresh = files.filter((f) => !known.has(f.name)).slice(0, REFINEMENT_TAB_LIMIT);
 
@@ -67,7 +53,6 @@ function useFileTabs(files: CanvasFile[]) {
   const closeTab = useCallback((name: string) => {
     setOpenTabs((prev) => {
       const remaining = prev.filter((t) => t !== name);
-      // If the closed tab was active, fall back to the first remaining tab.
       setActiveFileName((current) => (current === name ? remaining[0] ?? null : current));
       return remaining;
     });
@@ -88,18 +73,24 @@ function FileTypeIcon({ filename }: { filename: string }) {
   return <span className={`text-[10px] font-bold ${colorClass}`}>{label}</span>;
 }
 
-function Breadcrumb({ path }: { path: string }) {
+function Breadcrumb({ path, isEdited }: { path: string; isEdited?: boolean }) {
   const segments = path.split("/");
   return (
-    <div className="shrink-0 border-b border-white/[0.03] bg-[#080c16]/60 px-4 py-1.5">
-      <nav className="text-[11px] text-slate-600" aria-label="File path">
+    <div className="flex shrink-0 items-center justify-between border-b border-white/[0.03] bg-[#080c16]/60 px-4 py-1.5 text-[11px]">
+      <nav className="text-slate-600" aria-label="File path">
         {segments.map((segment, i) => (
           <span key={i}>
             {i > 0 && <span className="mx-1 text-slate-700" aria-hidden="true">›</span>}
-            <span className={i === segments.length - 1 ? "text-slate-400" : ""}>{segment}</span>
+            <span className={i === segments.length - 1 ? "text-slate-400 font-medium" : ""}>{segment}</span>
           </span>
         ))}
       </nav>
+      {isEdited && (
+        <span className="flex items-center gap-1.5 text-[10px] font-medium text-amber-400/90">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          Edited
+        </span>
+      )}
     </div>
   );
 }
@@ -114,59 +105,150 @@ function EmptyState({
   onClose: () => void;
 }) {
   return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="text-center max-w-md">
         {isRouting ? (
           <>
             <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-400" />
-            <p className="text-sm text-slate-400">Routing your task through the agent pipeline…</p>
+            <p className="text-sm text-slate-400 font-medium">Routing your task through the agent pipeline…</p>
             <p className="mt-1 text-xs text-slate-600">Selecting optimal models for each stage</p>
           </>
         ) : error ? (
-          <>
-            <p className="text-sm text-rose-300">{error}</p>
+          <div className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-5 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-rose-500/10 text-rose-400">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-rose-200">{error}</p>
             <button
               onClick={onClose}
-              className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-xs text-slate-400 hover:bg-white/[0.06]"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.08] hover:text-white"
             >
               ← Start over
             </button>
-          </>
+          </div>
         ) : (
-          <p className="text-sm text-slate-500">Select a file to view its contents</p>
+          <p className="text-sm text-slate-500">Select a file to view or edit its contents</p>
         )}
       </div>
     </div>
   );
 }
 
-function CodeView({ content }: { content: string }) {
-  const lines = content.split("\n");
+/* ── Interactive Code Editor Component ─────────────────── */
+
+interface CodeEditorProps {
+  filename: string;
+  content: string;
+  onChange: (newContent: string) => void;
+}
+
+function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const lineNumbersRef = useRef<HTMLDivElement | null>(null);
+  const syntaxRef = useRef<HTMLDivElement | null>(null);
+
+  const lines = useMemo(() => content.split("\n"), [content]);
   const gutterWidth = `${Math.max(String(lines.length).length, 2) * 0.65 + 2.5}rem`;
 
+  /* Synchronize vertical and horizontal scroll between textarea, gutter, and syntax overlay */
+  function handleScroll() {
+    if (!textareaRef.current) return;
+    const { scrollTop, scrollLeft } = textareaRef.current;
+    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = scrollTop;
+    if (syntaxRef.current) {
+      syntaxRef.current.scrollTop = scrollTop;
+      syntaxRef.current.scrollLeft = scrollLeft;
+    }
+  }
+
+  /* Support Tab key insertion (2 spaces) */
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const updated = content.substring(0, start) + "  " + content.substring(end);
+
+      onChange(updated);
+
+      // Restore cursor position after state update
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.selectionStart = start + 2;
+          textareaRef.current.selectionEnd = start + 2;
+        }
+      });
+    }
+  }
+
+  function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    onChange(e.target.value);
+  }
+
   return (
-    <pre
-      className="py-3 text-[13px] leading-[1.7]"
-      style={{ fontFamily: "var(--font-geist-mono), 'Fira Code', monospace" }}
-    >
-      {lines.map((line, i) => (
-        <div key={i} className="group flex hover:bg-white/[0.015]">
-          <span
-            className="inline-block shrink-0 select-none pr-5 text-right text-slate-600/50"
-            style={{ width: gutterWidth }}
-          >
+    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-[#0b0f1a] font-mono text-[13px] leading-[1.7]" style={{ fontFamily: "var(--font-geist-mono), 'Fira Code', monospace" }}>
+      {/* Gutter: Line Numbers */}
+      <div
+        ref={lineNumbersRef}
+        aria-hidden="true"
+        className="pointer-events-none shrink-0 select-none overflow-hidden py-3 text-right text-slate-600/50"
+        style={{ width: gutterWidth }}
+      >
+        {lines.map((_, i) => (
+          <div key={i} className="pr-5">
             {i + 1}
-          </span>
-          <code className="flex-1 whitespace-pre-wrap break-all pr-4">
-            {tokenizeLine(line).map((token, j) => (
-              <span key={j} style={{ color: TOKEN_PALETTE[token.kind] }}>
-                {token.text}
-              </span>
-            ))}
-          </code>
+          </div>
+        ))}
+      </div>
+
+      {/* Code Container */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* Syntax Highlighted Underlay */}
+        <div
+          ref={syntaxRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 overflow-hidden py-3 pr-4"
+        >
+          {lines.map((line, i) => (
+            <div key={i} className="whitespace-pre break-normal">
+              {tokenizeLine(line).map((token, j) => (
+                <span key={j} style={{ color: TOKEN_PALETTE[token.kind] }}>
+                  {token.text}
+                </span>
+              ))}
+              {/* Ensure empty lines retain height */}
+              {line === "" && <br />}
+            </div>
+          ))}
         </div>
-      ))}
-    </pre>
+
+        {/* Editable Transparent Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onScroll={handleScroll}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          aria-label={`Code editor for ${filename}`}
+          className="absolute inset-0 h-full w-full resize-none border-none bg-transparent py-3 pr-4 text-transparent caret-cyan-400 outline-none selection:bg-cyan-500/25 whitespace-pre break-normal"
+          style={{
+            fontFamily: "var(--font-geist-mono), 'Fira Code', monospace",
+            WebkitTextFillColor: "transparent",
+          }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -187,12 +269,25 @@ interface IdeCanvasProps {
   isRouting: boolean;
   mode: RouteMode;
   error: string | null;
+  onFileChange: (filename: string, newContent: string) => void;
   onRefine: (prompt: string) => void;
   onClose: () => void;
 }
 
-export function IdeCanvas({ runs, files, isRouting, mode, error, onRefine, onClose }: IdeCanvasProps) {
+export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, onRefine, onClose }: IdeCanvasProps) {
   const { activeFileName, activeFileData, openTabs, selectFile, closeTab, setActiveFileName } = useFileTabs(files);
+
+  /* Track edited state per file */
+  const [editedFiles, setEditedFiles] = useState<Set<string>>(new Set());
+
+  const handleContentChange = useCallback(
+    (newContent: string) => {
+      if (!activeFileName) return;
+      setEditedFiles((prev) => new Set(prev).add(activeFileName));
+      onFileChange(activeFileName, newContent);
+    },
+    [activeFileName, onFileChange],
+  );
 
   return (
     <section className="flex flex-1 flex-col py-4 sm:py-6" aria-label="Code workspace">
@@ -216,7 +311,7 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onRefine, onClo
             {mode} mode
           </span>
           {isRouting && (
-            <span className="flex items-center gap-1.5 text-xs text-cyan-300">
+            <span className="flex items-center gap-1.5 text-xs text-cyan-300 font-medium">
               <RoutingSpinner />
               Routing…
             </span>
@@ -237,6 +332,7 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onRefine, onClo
           <div className="ide-scrollbar flex shrink-0 items-center gap-0 overflow-x-auto border-b border-white/[0.04] bg-[#070b15]/80">
             {openTabs.map((tabPath) => {
               const isActive = tabPath === activeFileName;
+              const isEdited = editedFiles.has(tabPath);
               const name = basename(tabPath);
               return (
                 <button
@@ -251,6 +347,7 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onRefine, onClo
                 >
                   <FileTypeIcon filename={name} />
                   <span className="max-w-[140px] truncate">{name}</span>
+                  {isEdited && <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" title="Unsaved changes" />}
                   <span
                     role="button"
                     tabIndex={0}
@@ -270,24 +367,29 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onRefine, onClo
           </div>
 
           {/* Breadcrumb */}
-          {activeFileName && <Breadcrumb path={activeFileName} />}
+          {activeFileName && <Breadcrumb path={activeFileName} isEdited={editedFiles.has(activeFileName)} />}
 
           {/* Code area */}
-          <div className="ide-scrollbar flex-1 overflow-auto bg-[#0b0f1a]">
+          <div className="flex-1 overflow-hidden bg-[#0b0f1a]">
             {!activeFileData && files.length === 0 ? (
               <EmptyState isRouting={isRouting} error={error} onClose={onClose} />
             ) : activeFileData ? (
-              <CodeView content={activeFileData.content} />
+              <CodeEditor
+                key={activeFileData.name}
+                filename={activeFileData.name}
+                content={activeFileData.content}
+                onChange={handleContentChange}
+              />
             ) : (
               <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-slate-500">Select a file to view its contents</p>
+                <p className="text-sm text-slate-500">Select a file to view or edit its contents</p>
               </div>
             )}
           </div>
 
           {/* Inline error banner */}
           {error && files.length > 0 && (
-            <div role="alert" className="shrink-0 border-t border-rose-400/10 bg-rose-950/30 px-4 py-2.5 text-xs text-rose-300">
+            <div role="alert" className="shrink-0 border-t border-rose-400/20 bg-rose-950/40 px-4 py-2.5 text-xs font-medium text-rose-200">
               {error}
             </div>
           )}
