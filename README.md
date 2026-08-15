@@ -4,7 +4,7 @@
 
 FeatherRouter breaks down coding tasks into specialized pipeline stages — architecture planning, code implementation, and security review — and dynamically assigns the best open-source model for each stage using Gemini as a cognitive routing layer.
 
-Built for the [Impact Forge Hackathon](https://featherless.ai/), powered by the [Featherless API](https://featherless.ai/).
+Built for the [Impact Forge Hackathon 2026](https://impactforge26.devpost.com/), powered by the [Featherless API](https://featherless.ai/).
 
 ---
 
