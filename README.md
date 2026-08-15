@@ -101,6 +101,29 @@ User Prompt
      Final Output
 ```
 
+## Technical Overview & Hard Challenges
+
+### The Problem
+Single-model LLM generation often leads to sub-optimal results: vision models excel at planning from wireframes, code specialists (like Qwen2.5-Coder) excel at implementation, and general instruct models excel at auditing. Forcing one model to handle all stages degrades overall output quality.
+
+### Architecture & Solution
+FeatherRouter uses a 4-layer orchestrator:
+1. **Prompt Analysis & Routing (Gemini 2.5 Flash):** Evaluates user intent against 30 candidate models in the Featherless inventory.
+2. **Specialized Execution (Featherless API):** Dispatches stage tasks to specialized open-source models with fallback queues.
+3. **Canvas Sanitization & Deduplication:** Cleans code fences, strips LLM prose, and prevents duplicated script blocks.
+4. **Automated Quality Review (Gemini QA):** Audits multi-file DOM IDs, CSS contrast, and JS event listener bindings before rendering.
+
+### Technical Challenges Solved
+- **Model Output Deduplication:** Resolved internal block repetitions using top-level entry point triggers.
+- **Client-Side Iframe Execution:** Implemented a `DOMContentLoaded` event polyfill so preview scripts execute reliably even if loaded dynamically.
+- **Vendor Model Normalization:** Built fuzzy resolution matching Featherless model IDs against raw LLM output strings.
+
+---
+
+## Video Demo
+
+*Demo video link will be added here prior to submission.*
+
 ---
 
 ## License
