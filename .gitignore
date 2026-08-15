@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+
+# next.js
+.next/
+out/
+
+# production
+build/
+
+# debug logs
+*.log
+
+# env files
+.env*
+.env.local
+
+# typescript
+*.tsbuildinfo
+
+# IDE / OS
+.DS_Store
+.vscode/
