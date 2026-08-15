@@ -71,6 +71,9 @@ function cleanCodeContent(content: string, fileName?: string): string {
     }
   }
 
+  // Strip any remaining trailing blank lines (prevents empty space at end of editor)
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "");
+
   return cleaned;
 }
 

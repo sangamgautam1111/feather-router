@@ -1,108 +1,108 @@
-# 🪶 FeatherRouter
+# FeatherRouter
 
-> **Intelligent Multi-Agent Open Model Routing Engine**  
-> *Built for the Impact Forge Hackathon — Powered by Gemini 2.5 & Featherless API*
+**An intelligent model routing engine for multi-stage code generation.**
 
-[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js)](https://nextjs.org/)
-[![Featherless API](https://img.shields.io/badge/Featherless_API-21%2C700%2B_Models-cyan)](https://featherless.ai/)
-[![Gemini Brain](https://img.shields.io/badge/Router_Brain-Gemini_2.5_Flash-8860D0)](https://ai.google.dev/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+FeatherRouter breaks down coding tasks into specialized pipeline stages — architecture planning, code implementation, and security review — and dynamically assigns the best open-source model for each stage using Gemini as a cognitive routing layer.
+
+Built for the [Impact Forge Hackathon](https://featherless.ai/), powered by the [Featherless API](https://featherless.ai/).
 
 ---
 
-## 💡 The Problem
+## How It Works
 
-Most AI coding applications lock users into a single monolithic model (e.g. GPT-4o or Claude Sonnet). However, **no single model is optimal for all stages of software development**:
-- Large vision-language models excel at visual architecture planning.
-- Code-specialized models (`Qwen2.5-Coder-32B`) drastically outperform general chat models at syntax and logic generation.
-- Reasoning models (`DeepSeek-R1`) excel at edge-case detection and security auditing.
+Most AI coding tools use a single model for everything. That's a problem — a model trained for code generation isn't necessarily the best at architecture planning or security auditing.
 
----
+FeatherRouter solves this with a four-layer pipeline:
 
-## 🚀 The Solution: FeatherRouter
+1. **Prompt Analysis** — Gemini analyzes the user's coding request, classifying intent, complexity, and required capabilities.
+2. **Model Selection** — Based on that analysis, Gemini selects the optimal open-source model from 21,700+ models available on Featherless for each pipeline stage.
+3. **Execution** — The selected models execute their specialized stages (plan → build → review) on Featherless infrastructure.
+4. **Quality Review** — Gemini reviews the final generated code for common bugs (contrast issues, NaN edge cases, broken state machines) and patches them before the user sees the output.
 
-**FeatherRouter** is an explainable multi-agent routing system that dynamically breaks down coding tasks across specialized open-source models:
-
-```mermaid
-graph TD
-    A[User Prompt / Image Wireframe] --> B[🧠 Gemini 2.5 Flash Router Brain]
-    B -->|Analyzes Task Intent & Stage Constraints| C[Model Selection Engine]
-    C -->|Stage 01: Architecture| D[Qwen3-VL / DeepSeek-R1]
-    C -->|Stage 02: Implementation| E[Qwen2.5-Coder-32B]
-    C -->|Stage 03: Security Review| F[Mistral-Small-3.1-24B]
-    D & E & F -->|Executes via| G[⚡ Featherless API Serverless Engine]
-    G --> H[Sanitization & Quality Gate]
-    H --> I[Live Web Preview & Canvas Workspace]
-```
+Every routing decision is fully transparent — users can inspect the score breakdowns, model rankings, and reasoning behind each selection in real time.
 
 ---
 
-## ✨ Key Features
+## Features
 
-### 1. 🧠 Dual-Layer Agent Architecture
-- **Cognitive Router Brain (Gemini 2.5 Flash):** Evaluates task complexity, stage requirements, and model specializations in real-time (~1.2s) to choose the optimal open-source model.
-- **Model Execution Engine (Featherless API):** Runs the selected model against 21,700+ serverless open models.
-
-### 2. 📊 Transparent & Explainable Decision Engine
-- Inspectable decision panel rendering exact score breakdowns (`/100`), signals evaluated, latency timings, and natural language routing rationale for every stage.
-
-### 3. 🛡️ Self-Healing & Cascading Fallback Queue
-- Stage quality gates validate output syntax before accepting completions.
-- Evaluates a 5-candidate fallback queue in Quality Mode to automatically recover from model timeouts or transient errors.
-
-### 4. 🎨 Modern Canvas & Live Preview Environment
-- **Live Web Preview:** Instant iframe browser preview for HTML/CSS/JS base web apps with auto-injected Tailwind polyfills.
-- **Code Sanitizer:** Automated post-processor that strips trailing LLM prose commentary to prevent runtime `SyntaxError` crashes.
-- **Local Deployment Modal:** Clean setup guide for Next.js, React, and Python projects.
-
-### 5. 🖼️ Multi-Modal Wireframe Parsing
-- Drag-and-drop or `Ctrl+V` clipboard image upload with client-side canvas compression down to max 1024px JPEG (~90KB).
+- **Transparent routing decisions** with score breakdowns and natural-language reasoning
+- **Cascading fallback queue** — if a model times out, the next-best candidate picks up automatically
+- **Live web preview** for HTML/CSS/JS projects directly in the browser
+- **Image-to-code** — paste a wireframe screenshot and the vision pipeline generates code from it
+- **Code sanitization** — strips LLM artifacts (trailing prose, markdown fences) before rendering
+- **One-click ZIP export** of the generated codebase
+- **Three pipeline modes** — Fast (2 stages), Balanced (3 stages), Quality (3 stages + deeper evaluation)
 
 ---
 
-## 🛠️ Getting Started
+## Tech Stack
 
-### Prerequisites
-- Node.js 18.x or higher
-- A [Featherless API](https://featherless.ai/) Key
-- A [Google Gemini API](https://ai.google.dev/) Key (Optional, for Gemini routing brain)
+| Layer | Technology |
+|:------|:-----------|
+| Frontend | Next.js 16, React, TypeScript |
+| Router Brain | Gemini 2.5 Pro (Google AI) |
+| Model Execution | Featherless API (21,700+ open models) |
+| Key Models | Qwen2.5-Coder-32B, Qwen3-VL-30B, DeepSeek-R1, Mistral-Small-3.1 |
+| Styling | Hand-written CSS with dark mode |
 
-### Environment Setup
+---
 
-Create a `.env.local` file in the root directory:
-
-```env
-FEATHERLESS_API_KEY=your_featherless_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-
-### Installation
+## Setup
 
 ```bash
-# Clone repository
 git clone https://github.com/sangamgautam1111/feather-router.git
 cd feather-router
-
-# Install dependencies
 npm install
+```
 
-# Run development server
+Create `.env.local` in the project root:
+
+```
+FEATHERLESS_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
+```
+
+Start the dev server:
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 🧪 Production Build Verification
+## Architecture
 
-```bash
-# Run TypeScript compilation and static page generation
-npm run build
+```
+User Prompt
+    │
+    ▼
+┌──────────────────────────┐
+│  Gemini 2.5 Pro          │  ← Analyzes task, selects models
+│  (Router Brain)          │
+└──────────┬───────────────┘
+           │
+    ┌──────┼──────────────────┐
+    ▼      ▼                  ▼
+ Stage 1   Stage 2         Stage 3
+  Plan      Build           Review
+ (Qwen3)  (Qwen2.5-Coder) (Mistral)
+    │      │                  │
+    └──────┼──────────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│  Gemini 2.5 Pro          │  ← Reviews output, fixes bugs
+│  (Quality Gate)          │
+└──────────┬───────────────┘
+           │
+           ▼
+     Final Output
 ```
 
 ---
 
-## 📜 License
+## License
 
-MIT License © 2026 FeatherRouter Team. Built for the Impact Forge Hackathon.
+MIT
