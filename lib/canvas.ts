@@ -35,6 +35,45 @@ const extensions: Record<string, string> = {
   typescript: "ts",
 };
 
+/**
+ * Strips any trailing conversational English prose or markdown notes
+ * accidentally appended inside code blocks by LLMs.
+ */
+function cleanCodeContent(content: string, fileName?: string): string {
+  let cleaned = content.trim();
+  const ext = fileName?.split(".").at(-1)?.toLowerCase();
+
+  // Remove trailing markdown code fence backticks if present inside block
+  cleaned = cleaned.replace(/```\s*$/g, "").trim();
+
+  if (ext === "js" || ext === "ts" || ext === "jsx" || ext === "tsx" || ext === "css" || ext === "html" || ext === "py") {
+    const lines = cleaned.split("\n");
+    let cutoffIndex = lines.length;
+
+    const prosePatterns = [
+      /^(this|note|make sure|here is|the above|this file|this update|this script|in this|as you can see|the code below|you can now|make sure to|remember to)/i,
+      /^```/
+    ];
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      if (prosePatterns.some((pattern) => pattern.test(line))) {
+        cutoffIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    if (cutoffIndex < lines.length) {
+      cleaned = lines.slice(0, cutoffIndex).join("\n").trim();
+    }
+  }
+
+  return cleaned;
+}
+
 function artifactFor(result: RouteResponse, stage: AgentArtifact["stage"]) {
   return result.artifacts.find((artifact) => artifact.stage === stage && artifact.status === "complete");
 }
@@ -47,8 +86,8 @@ function codeBlocks(content: string): CodeBlock[] {
   while (match) {
     const language = match[1].trim().split(/\s+/)[0].toLowerCase() || "text";
     const fileMarker = fileMarkerFrom(match[2]);
-    const blockContent = fileMarker.content.trim();
-    if (blockContent) blocks.push({ language, content: blockContent, fileName: fileMarker.fileName });
+    const cleanedContent = cleanCodeContent(fileMarker.content, fileMarker.fileName);
+    if (cleanedContent) blocks.push({ language, content: cleanedContent, fileName: fileMarker.fileName });
     match = fence.exec(content);
   }
 
@@ -101,7 +140,8 @@ function markedCodeBlocks(content: string): CodeBlock[] {
 
   return markers.flatMap((marker, index) => {
     const nextMarker = markers[index + 1];
-    const blockContent = content.slice(marker.contentStart, nextMarker?.index).trim();
+    const rawContent = content.slice(marker.contentStart, nextMarker?.index).trim();
+    const blockContent = cleanCodeContent(rawContent, marker.fileName);
     if (!blockContent) return [];
 
     return [{ language: languageForFileName(marker.fileName), content: blockContent, fileName: marker.fileName }];
@@ -145,6 +185,54 @@ function uniqueFileName(name: string, usedNames: Set<string>) {
   return candidate;
 }
 
+/**
+ * Smart Core Structure & Path Auto-Inference:
+ * If a code block lacks an explicit file marker, inspect its content to assign
+ * clean, production-grade Next.js / Web file paths (app/page.tsx, components/Hero.tsx, etc.).
+ */
+function inferFileName(block: CodeBlock, index: number, totalBlocks: number): string {
+  if (block.fileName) return block.fileName;
+
+  const text = block.content;
+  const lang = block.language.toLowerCase();
+
+  // HTML file
+  if (lang === "html" || text.includes("<!DOCTYPE html>") || text.includes("<html")) {
+    return "index.html";
+  }
+
+  // CSS file
+  if (lang === "css" || text.includes("@tailwind") || text.includes("body {")) {
+    return "styles/globals.css";
+  }
+
+  // Next.js / React TSX / JSX files
+  if (lang === "tsx" || lang === "jsx" || lang === "ts" || lang === "js" || text.includes("React") || text.includes("className")) {
+    if (text.includes("export default function Page") || text.includes("export default function Home") || text.includes("usePathname")) {
+      return "app/page.tsx";
+    }
+    if (text.includes("function Hero") || text.includes("id=\"hero\"") || text.includes("HeroSection")) {
+      return "components/Hero.tsx";
+    }
+    if (text.includes("function Header") || text.includes("function Navbar") || text.includes("<nav")) {
+      return "components/Navbar.tsx";
+    }
+    if (text.includes("function Features") || text.includes("feature-card")) {
+      return "components/Features.tsx";
+    }
+    if (text.includes("function Footer") || text.includes("<footer")) {
+      return "components/Footer.tsx";
+    }
+    if (totalBlocks === 1) {
+      return "app/page.tsx";
+    }
+    return `components/Component-${index + 1}.${lang === "jsx" || lang === "js" ? "jsx" : "tsx"}`;
+  }
+
+  const ext = extensions[lang] ?? "txt";
+  return `src/file-${index + 1}.${ext}`;
+}
+
 function implementationFiles(artifact: AgentArtifact | undefined): CanvasFile[] {
   if (!artifact) return [];
 
@@ -153,14 +241,25 @@ function implementationFiles(artifact: AgentArtifact | undefined): CanvasFile[] 
     return [{ name: "implementation.md", language: "markdown", content: artifact.content, source: "implementation" }];
   }
 
+  // Deduplicate code blocks by filename (keep longest complete version)
+  const fileMap = new Map<string, { block: CodeBlock; index: number }>();
+  
+  blocks.slice(0, 8).forEach((block, index) => {
+    const rawFileName = inferFileName(block, index, blocks.length);
+    const existing = fileMap.get(rawFileName);
+    if (!existing || block.content.length > existing.block.content.length) {
+      fileMap.set(rawFileName, { block, index });
+    }
+  });
+
   const usedNames = new Set<string>();
-  return blocks.slice(0, 8).map((block, index) => {
-    const extension = extensions[block.language] ?? "txt";
-    const suffix = blocks.length === 1 ? "" : `-${index + 1}`;
+  return Array.from(fileMap.values()).map(({ block, index }) => {
+    const rawFileName = inferFileName(block, index, blocks.length);
+    const finalContent = cleanCodeContent(block.content, rawFileName);
     return {
-      name: uniqueFileName(block.fileName ?? `implementation${suffix}.${extension}`, usedNames),
+      name: uniqueFileName(rawFileName, usedNames),
       language: block.language,
-      content: block.content,
+      content: finalContent,
       source: "implementation",
     };
   });

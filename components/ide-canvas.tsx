@@ -5,6 +5,8 @@ import { useState, useMemo, useCallback, useEffect, useRef, type ChangeEvent, ty
 import { FileExplorer } from "@/components/file-explorer";
 import { DecisionHistory } from "@/components/decision-history";
 import { RefinementInput } from "@/components/refinement-input";
+import { DeployModal } from "@/components/deploy-modal";
+import { LivePreviewModal } from "@/components/live-preview-modal";
 import type { CanvasFile } from "@/lib/canvas";
 import { styleForFile, basename, downloadCodebaseZip } from "@/lib/file-utils";
 import { tokenizeLine, TOKEN_PALETTE } from "@/lib/tokenizer";
@@ -14,6 +16,18 @@ import type { RouteMode, RunEntry } from "@/lib/types";
 
 const INITIAL_TAB_LIMIT = 4;
 const REFINEMENT_TAB_LIMIT = 2;
+
+/**
+ * Returns true ONLY if workspace consists strictly of base web files (HTML, CSS, JS, SVG, MD, TXT).
+ * For Next.js, React, Vue, Python, or third-party backend stacks, returns false to prioritize Local Test & Deploy guidance.
+ */
+function isPureBaseWeb(files: CanvasFile[]): boolean {
+  if (!files || files.length === 0) return false;
+  return files.every((f) => {
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    return ext === "html" || ext === "css" || ext === "js" || ext === "svg" || ext === "md" || ext === "txt";
+  });
+}
 
 /* ── Custom hook: tab & active-file management ─────────── */
 
@@ -138,42 +152,38 @@ function EmptyState({
   );
 }
 
-/* ── Interactive Code Editor Component ─────────────────── */
+function RoutingSpinner() {
+  return (
+    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
+/* ── Code Editor Component ─────────────────────────────── */
 
 interface CodeEditorProps {
-  filename: string;
   content: string;
+  filename: string;
   onChange: (newContent: string) => void;
 }
 
-function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const lineNumbersRef = useRef<HTMLDivElement | null>(null);
-  const syntaxRef = useRef<HTMLDivElement | null>(null);
-
+function CodeEditor({ content, filename, onChange }: CodeEditorProps) {
   const lines = useMemo(() => content.split("\n"), [content]);
-  const gutterWidth = `${Math.max(String(lines.length).length, 2) * 0.65 + 2.5}rem`;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  function handleScroll() {
-    if (!textareaRef.current) return;
-    const { scrollTop, scrollLeft } = textareaRef.current;
-    if (lineNumbersRef.current) lineNumbersRef.current.scrollTop = scrollTop;
-    if (syntaxRef.current) {
-      syntaxRef.current.scrollTop = scrollTop;
-      syntaxRef.current.scrollLeft = scrollLeft;
-    }
+  function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    onChange(e.target.value);
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Tab") {
       e.preventDefault();
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
+      const target = e.currentTarget;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
       const updated = content.substring(0, start) + "  " + content.substring(end);
-
       onChange(updated);
 
       requestAnimationFrame(() => {
@@ -185,75 +195,56 @@ function CodeEditor({ filename, content, onChange }: CodeEditorProps) {
     }
   }
 
-  function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    onChange(e.target.value);
-  }
-
   return (
-    <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-[#0b0f1a] font-mono text-[13px] leading-[1.7]" style={{ fontFamily: "var(--font-geist-mono), 'Fira Code', monospace" }}>
-      {/* Gutter: Line Numbers */}
+    <div className="relative flex min-h-0 flex-1 overflow-hidden font-mono text-[13px] leading-6">
+      {/* Line numbers */}
       <div
-        ref={lineNumbersRef}
+        className="select-none border-r border-white/[0.03] bg-[#060a14]/60 py-3 pr-3 text-right text-slate-600 font-mono text-xs"
         aria-hidden="true"
-        className="pointer-events-none shrink-0 select-none overflow-hidden py-3 text-right text-slate-600/50"
-        style={{ width: gutterWidth }}
+        style={{ width: `${Math.max(3, String(lines.length).length + 1)}rem` }}
       >
         {lines.map((_, i) => (
-          <div key={i} className="pr-5">
-            {i + 1}
-          </div>
+          <div key={i}>{i + 1}</div>
         ))}
       </div>
 
-      {/* Code Container */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        {/* Syntax Highlighted Underlay */}
-        <div
-          ref={syntaxRef}
+      {/* Syntax-highlighted overlay + transparent editable textarea */}
+      <div className="relative min-w-0 flex-1 overflow-auto ide-scrollbar">
+        {/* Highlighted display code */}
+        <pre
+          className="pointer-events-none absolute inset-0 m-0 overflow-visible p-3 font-mono text-[13px] leading-6 text-slate-300"
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 overflow-hidden py-3 pr-4"
         >
-          {lines.map((line, i) => (
-            <div key={i} className="whitespace-pre break-normal">
-              {tokenizeLine(line).map((token, j) => (
-                <span key={j} style={{ color: TOKEN_PALETTE[token.kind] }}>
-                  {token.text}
-                </span>
-              ))}
-              {line === "" && <br />}
-            </div>
-          ))}
-        </div>
+          {lines.map((line, lineIdx) => {
+            const tokens = tokenizeLine(line);
+            return (
+              <div key={lineIdx} className="whitespace-pre">
+                {tokens.length === 0 ? (
+                  "\n"
+                ) : (
+                  tokens.map((token, tokIdx) => (
+                    <span key={tokIdx} style={{ color: TOKEN_PALETTE[token.kind] ?? "#c9d1d9" }}>
+                      {token.text}
+                    </span>
+                  ))
+                )}
+              </div>
+            );
+          })}
+        </pre>
 
-        {/* Editable Transparent Textarea */}
+        {/* Editable transparent textarea */}
         <textarea
           ref={textareaRef}
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onScroll={handleScroll}
           spellCheck={false}
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
+          className="absolute inset-0 m-0 h-full w-full resize-none border-0 bg-transparent p-3 font-mono text-[13px] leading-6 text-transparent caret-white outline-none selection:bg-cyan-500/30"
           aria-label={`Code editor for ${filename}`}
-          className="absolute inset-0 h-full w-full resize-none border-none bg-transparent py-3 pr-4 text-transparent caret-cyan-400 outline-none selection:bg-cyan-500/25 whitespace-pre break-normal"
-          style={{
-            fontFamily: "var(--font-geist-mono), 'Fira Code', monospace",
-            WebkitTextFillColor: "transparent",
-          }}
         />
       </div>
     </div>
-  );
-}
-
-function RoutingSpinner() {
-  return (
-    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
   );
 }
 
@@ -266,7 +257,7 @@ interface IdeCanvasProps {
   mode: RouteMode;
   error: string | null;
   onFileChange: (filename: string, newContent: string) => void;
-  onRefine: (prompt: string) => void;
+  onRefine: (prompt: string, image?: string) => void;
   onClose: () => void;
 }
 
@@ -274,6 +265,8 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
   const { activeFileName, activeFileData, openTabs, selectFile, closeTab, setActiveFileName } = useFileTabs(files);
 
   const [editedFiles, setEditedFiles] = useState<Set<string>>(new Set());
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [isLivePreviewOpen, setIsLivePreviewOpen] = useState(false);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   const handleContentChange = useCallback(
@@ -297,6 +290,9 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
     }
   }
 
+  const showLivePreview = isPureBaseWeb(files);
+  const latestTaskPrompt = runs.length > 0 ? runs[runs.length - 1]?.prompt ?? "" : "";
+
   return (
     <section className="flex flex-1 flex-col py-4 sm:py-6" aria-label="Code workspace">
       {/* ── Top bar ──────────────────────────────────────── */}
@@ -315,6 +311,36 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Live Web Preview Button: Displayed ONLY for base HTML/CSS/JS web applications */}
+          {files.length > 0 && showLivePreview && (
+            <button
+              onClick={() => setIsLivePreviewOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3.5 py-1.5 text-xs font-semibold text-emerald-200 transition-all hover:bg-emerald-400/20 hover:text-white"
+              title="Open live web app preview"
+            >
+              <svg className="h-3.5 w-3.5 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="10 8 16 12 10 16 10 8" />
+              </svg>
+              <span>Live Web Preview</span>
+            </button>
+          )}
+
+          {/* How to Test & Deploy Button: Clean, minimalist terminal icon without stacked layers */}
+          {files.length > 0 && (
+            <button
+              onClick={() => setIsDeployModalOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-slate-700/80 bg-slate-900/80 px-3.5 py-1.5 text-xs font-semibold text-slate-200 transition-all hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+              title="View local testing and deployment steps"
+            >
+              <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+              <span>How to Test & Deploy ?</span>
+            </button>
+          )}
+
           {/* Download Codebase (.zip) Button */}
           {files.length > 0 && (
             <button
@@ -437,6 +463,22 @@ export function IdeCanvas({ runs, files, isRouting, mode, error, onFileChange, o
       <div className="mt-3 overflow-hidden rounded-xl border border-white/[0.06] bg-[#080c16]/95 xl:hidden">
         <DecisionHistory runs={runs} />
       </div>
+
+      {/* Floating Modals */}
+      {isDeployModalOpen && (
+        <DeployModal
+          task={latestTaskPrompt}
+          files={files}
+          onClose={() => setIsDeployModalOpen(false)}
+        />
+      )}
+
+      {isLivePreviewOpen && (
+        <LivePreviewModal
+          files={files}
+          onClose={() => setIsLivePreviewOpen(false)}
+        />
+      )}
     </section>
   );
 }

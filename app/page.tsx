@@ -7,16 +7,9 @@ import { TaskComposer } from "@/components/task-composer";
 import { filesForCanvas, type CanvasFile } from "@/lib/canvas";
 import type { RouteMode, RouteResponse, RunEntry } from "@/lib/types";
 
-/* ── Constants ─────────────────────────────────────────── */
+const STARTER_TASK = "Build a responsive calculator web app with dark mode and smooth animations";
 
-const STARTER_TASK =
-  "Add protected dashboard routes to a Next.js application, including a middleware check and a friendly redirect for signed-out users.";
-
-const MIN_TASK_LENGTH = 12;
-
-/* ── Pure helpers ──────────────────────────────────────── */
-
-function mergeFilesByName(existing: CanvasFile[], incoming: CanvasFile[]): CanvasFile[] {
+function mergeCanvasFiles(existing: CanvasFile[], incoming: CanvasFile[]): CanvasFile[] {
   const merged = new Map<string, CanvasFile>();
   for (const file of existing) merged.set(file.name, file);
   for (const file of incoming) merged.set(file.name, file);
@@ -61,6 +54,7 @@ async function parseOrThrow(response: Response, fallbackMessage: string): Promis
 export default function Home() {
   const [task, setTask] = useState(STARTER_TASK);
   const [mode, setMode] = useState<RouteMode>("balanced");
+  const [image, setImage] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [isRouting, setIsRouting] = useState(false);
   const [isIdeOpen, setIsIdeOpen] = useState(false);
@@ -80,8 +74,8 @@ export default function Home() {
 
   async function routeTask() {
     const trimmed = task.trim();
-    if (trimmed.length < MIN_TASK_LENGTH) {
-      setError("Describe the coding task in a little more detail.");
+    if (trimmed.length < 5 && !image) {
+      setError("Describe the coding task or attach an image.");
       return;
     }
 
@@ -89,16 +83,21 @@ export default function Home() {
     setError(null);
     setIsIdeOpen(true);
 
+    const taskPrompt = trimmed || "Build application from attached image wireframe";
+
     try {
       const response = await fetch("/api/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: trimmed, mode }),
+        body: JSON.stringify({ task: taskPrompt, mode, image }),
       });
       const result = await parseOrThrow(response, "The coding agent could not complete this run.");
       const generatedFiles = filesForCanvas(result);
 
-      setRuns([toRunEntry(trimmed, mode, result)]);
+      const runEntry = toRunEntry(taskPrompt, mode, result);
+      runEntry.image = image;
+
+      setRuns([runEntry]);
       setFiles(generatedFiles);
     } catch (err) {
       setError(formatErrorMessage(err, "The coding agent could not complete this run."));
@@ -110,64 +109,66 @@ export default function Home() {
   /* ── Iterative refinement ─────────────────────────────── */
 
   const refineTask = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, refinementImage?: string) => {
       setIsRouting(true);
       setError(null);
+
+      const activeImage = refinementImage || image;
 
       try {
         const response = await fetch("/api/refine", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task: prompt, mode, existingCode: packCodeContext(files) }),
+          body: JSON.stringify({
+            task: prompt,
+            mode,
+            existingCode: packCodeContext(files),
+            image: activeImage,
+          }),
         });
-        const result = await parseOrThrow(response, "The refinement could not complete.");
-        const incomingFiles = filesForCanvas(result);
 
-        setRuns((prev) => [...prev, toRunEntry(prompt, mode, result)]);
-        setFiles((prev) => mergeFilesByName(prev, incomingFiles));
+        const result = await parseOrThrow(response, "The agent could not refine your workspace.");
+        const updatedFiles = filesForCanvas(result);
+        const mergedFiles = mergeCanvasFiles(files, updatedFiles);
+
+        const runEntry = toRunEntry(prompt, mode, result);
+        runEntry.image = activeImage;
+
+        setRuns((prevRuns) => [...prevRuns, runEntry]);
+        setFiles(mergedFiles);
       } catch (err) {
-        setError(formatErrorMessage(err, "The refinement could not complete."));
+        setError(formatErrorMessage(err, "The agent could not refine your workspace."));
       } finally {
         setIsRouting(false);
       }
     },
-    [files, mode],
+    [files, image, mode],
   );
-
-  /* ── Reset ────────────────────────────────────────────── */
 
   function closeIde() {
     setIsIdeOpen(false);
-    setRuns([]);
-    setFiles([]);
     setError(null);
   }
 
-  /* ── Render ───────────────────────────────────────────── */
-
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#060813] text-slate-100">
-      {/* Background layers */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 bg-cover bg-[position:68%_center] bg-no-repeat"
-        style={{ backgroundImage: "url('/feather-router-hero.jpg')" }}
-      />
-      <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#030610]/95 via-[#030610]/72 to-[#030610]/15" />
-      <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-[#030610]/20 via-transparent to-[#030610]/55" />
-
-      <section className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-8 pt-4 sm:px-6 lg:px-10">
-        {/* Header — only visible on landing page */}
-        {!isIdeOpen && (
-          <header className="flex items-center justify-between border-b border-white/10 pb-6">
-            <a href="#top" aria-label="FeatherRouter home">
-              <span className="font-serif text-xl tracking-tight text-white">FeatherRouter</span>
-            </a>
-            <p className="text-right text-xs font-medium tracking-wide text-slate-400">
-              Built for <span className="text-cyan-100">Impact Forge Hackathon 2026</span>
-            </p>
-          </header>
-        )}
+    <main className="min-h-screen bg-[#030712] text-slate-100">
+      <section className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 sm:px-6 lg:px-8">
+        <header className="flex items-center justify-between border-b border-white/[0.04] py-4">
+          <div className="flex items-center gap-3">
+            <span className="font-serif text-xl tracking-tight text-white">FeatherRouter</span>
+            <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-200">
+              Impact Forge Hackathon
+            </span>
+          </div>
+          <a
+            className="text-xs text-slate-400 hover:text-white transition"
+            href="https://featherless.ai"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Powered by Featherless API →
+          </a>
+        </header>
 
         {isIdeOpen ? (
           <IdeCanvas
@@ -193,8 +194,10 @@ export default function Home() {
                 <TaskComposer
                   task={task}
                   mode={mode}
+                  image={image}
                   isRouting={isRouting}
                   onTaskChange={setTask}
+                  onImageChange={setImage}
                   onModeChange={setMode}
                   onRoute={routeTask}
                 />

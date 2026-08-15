@@ -2,7 +2,7 @@ export type RouteMode = "fast" | "balanced" | "quality";
 
 export type AgentStage = "plan" | "build" | "review";
 
-export type TaskKind = "debugging" | "implementation" | "explanation" | "review" | "general";
+export type TaskKind = "debugging" | "implementation" | "explanation" | "review" | "general" | "vision";
 
 export type StageStatus = "ready" | "running" | "complete" | "failed";
 
@@ -39,6 +39,7 @@ export interface RouteResponse {
   decisions: RouteDecision[];
   artifacts: AgentArtifact[];
   completedAt: string;
+  hasImage?: boolean;
 }
 
 export interface RunEntry {
@@ -47,4 +48,5 @@ export interface RunEntry {
   mode: RouteMode;
   result: RouteResponse;
   timestamp: string;
+  image?: string;
 }
