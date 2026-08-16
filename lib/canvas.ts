@@ -272,6 +272,28 @@ function implementationFiles(artifact: AgentArtifact | undefined): CanvasFile[] 
     }
   });
 
+  // Auto-extract embedded <style> and <script> from index.html into styles.css & script.js if missing
+  const htmlEntry = fileMap.get("index.html");
+  if (htmlEntry && !fileMap.has("styles.css")) {
+    const styleMatch = htmlEntry.block.content.match(/<style[\s\S]*?>([\s\S]*?)<\/style>/i);
+    if (styleMatch && styleMatch[1].trim()) {
+      fileMap.set("styles.css", {
+        block: { language: "css", content: styleMatch[1].trim(), fileName: "styles.css" },
+        index: 98,
+      });
+    }
+  }
+
+  if (htmlEntry && !fileMap.has("script.js")) {
+    const scriptMatch = htmlEntry.block.content.match(/<script[\s\S]*?>([\s\S]*?)<\/script>/i);
+    if (scriptMatch && scriptMatch[1].trim() && !scriptMatch[0].includes("src=")) {
+      fileMap.set("script.js", {
+        block: { language: "javascript", content: scriptMatch[1].trim(), fileName: "script.js" },
+        index: 99,
+      });
+    }
+  }
+
   const usedNames = new Set<string>();
   return Array.from(fileMap.values()).map(({ block, index }) => {
     const rawFileName = inferFileName(block, index, blocks.length);

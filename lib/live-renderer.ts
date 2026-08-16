@@ -387,6 +387,25 @@ export function bundleWebWorkspace(files: CanvasFile[]): string {
       }
     };
 
+    // Prevent <a> tags and <form> submits from navigating preview iframe away to host URL
+    document.addEventListener('click', function(e) {
+      const a = e.target.closest('a');
+      if (a) {
+        const href = a.getAttribute('href');
+        if (href) {
+          e.preventDefault();
+          if (href.startsWith('#') && href.length > 1) {
+            const targetEl = document.querySelector(href);
+            if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      }
+    }, true);
+
+    document.addEventListener('submit', function(e) {
+      e.preventDefault();
+    }, true);
+
     function runWorkspaceScripts() {
       ${processedCodeBlocks}
     }
