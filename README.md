@@ -122,7 +122,15 @@ FeatherRouter uses a 4-layer orchestrator:
 
 ## Video Demo
 
-*Demo video link will be added here prior to submission.*
+Watch the 2-minute live demo on YouTube:  
+▶️ [FeatherRouter — Live Demo Video](https://youtu.be/IhI5srr5TFI?si=HmjwnnlaAMkrpCO7)
+
+---
+
+## Live Production App
+
+Try the live production application directly:  
+🌐 [https://feather-router--featherrouter.us-east4.hosted.app](https://feather-router--featherrouter.us-east4.hosted.app)
 
 ---
 
